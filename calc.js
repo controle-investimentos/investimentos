@@ -75,9 +75,11 @@ const mesAnterior = (ym) => {
  *   No ano, desempata quem guardou em mais meses.
  * - patrimonio: saldo inicial das caixinhas aprovadas + lançamentos aprovados (inclui rendimentos).
  * - constancia: meses seguidos guardando (> 0) até o mês atual (ou até o anterior, se o atual ainda não teve aporte).
- * - meta: patrimônio ÷ soma das metas das caixinhas da pessoa.
+ * - meta (ritmo do prazo): quanto a pessoa já juntou do que faltava para a meta (meta − saldo inicial),
+ *   comparado com quanto deveria ter juntado pelo tempo que já passou até o prazo. 1 = 100% = no ritmo.
+ *   Só caixinhas aprovadas com meta e prazo; meta menor ou igual ao saldo inicial (meta fácil) não conta.
  */
-export function rankings(pessoas, caixinhas, lancs, mesAtual) {
+export function rankings(pessoas, caixinhas, lancs, mesAtual, hojeISO = mesAtual + "-15") {
   const cxPessoa = new Map(caixinhas.map(c => [c.id, c.pessoaId]));
   const net = {}, rend = {};
   for (const l of lancs) {
@@ -103,16 +105,14 @@ export function rankings(pessoas, caixinhas, lancs, mesAtual) {
     return { pessoaId: p.id, nome: p.nome, valor: ms.reduce((s, [, v]) => s + v, 0), desempate: ms.filter(([, v]) => v > 0).length };
   }));
 
-  const pat = {}, metaTot = {};
+  const pat = {};
   for (const c of caixinhas) {
     if (aprovado(c)) pat[c.pessoaId] = (pat[c.pessoaId] || 0) + (Number(c.saldoInicial) || 0);
-    metaTot[c.pessoaId] = (metaTot[c.pessoaId] || 0) + (Number(c.meta) || 0);
   }
   for (const pid in net) for (const ym in net[pid]) pat[pid] = (pat[pid] || 0) + net[pid][ym];
   for (const pid in rend) pat[pid] = (pat[pid] || 0) + rend[pid];
   const patrimonio = ord(pessoas.map(p => ({ pessoaId: p.id, nome: p.nome, valor: pat[p.id] || 0 })));
-  const meta = ord(pessoas.filter(p => metaTot[p.id] > 0)
-    .map(p => ({ pessoaId: p.id, nome: p.nome, valor: Math.max(pat[p.id] || 0, 0) / metaTot[p.id] })));
+  const meta = ritmoMeta(pessoas, caixinhas, lancs, hojeISO, ord);
 
   const anoAtual = mesAtual.slice(0, 4);
   const constancia = ord(pessoas.map(p => {
@@ -123,6 +123,31 @@ export function rankings(pessoas, caixinhas, lancs, mesAtual) {
     return { pessoaId: p.id, nome: p.nome, valor: seq, desempate: noAno };
   }));
   return { guardouMes, guardouAno, patrimonio, constancia, meta };
+}
+
+const DIA = 86400000;
+const ts = (d) => Date.parse(String(d).slice(0, 10) + "T00:00:00Z");
+function ritmoMeta(pessoas, caixinhas, lancs, hojeISO, ord) {
+  const primeiro = {};
+  for (const l of lancs) if (l.data && (!primeiro[l.caixinhaId] || l.data < primeiro[l.caixinhaId])) primeiro[l.caixinhaId] = l.data;
+  const feito = {}, esperado = {};
+  for (const c of caixinhas) {
+    if (!aprovado(c) || !c.prazo) continue;
+    const ini = Number(c.saldoInicial) || 0, objetivo = (Number(c.meta) || 0) - ini;
+    if (objetivo <= 0) continue;                       // meta já batida no cadastro: não vale
+    const inicio = c.dataInicial || primeiro[c.id];
+    if (!inicio) continue;
+    const dur = ts(c.prazo) - ts(inicio);
+    if (!(dur > 0)) continue;
+    // fração do prazo que já passou (mínimo de 30 dias, para não distorcer caixinha recém-criada)
+    const frac = Math.min(1, Math.max((ts(hojeISO) - ts(inicio)) / dur, (30 * DIA) / dur));
+    let saldo = ini;
+    for (const l of lancs) if (l.caixinhaId === c.id && aprovado(l)) saldo += (l.tipo === "Retirada" ? -1 : 1) * (Number(l.valor) || 0);
+    feito[c.pessoaId] = (feito[c.pessoaId] || 0) + Math.min(Math.max(saldo - ini, 0), objetivo);
+    esperado[c.pessoaId] = (esperado[c.pessoaId] || 0) + objetivo * frac;
+  }
+  return ord(pessoas.filter(p => esperado[p.id] > 0)
+    .map(p => ({ pessoaId: p.id, nome: p.nome, valor: (feito[p.id] || 0) / esperado[p.id] })));
 }
 
 /** Versão pública do ranking (só posição e nome, sem valores) para os usuários. */

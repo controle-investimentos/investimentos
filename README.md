@@ -34,7 +34,7 @@ Teste local: `python3 -m http.server 8000` e abra `http://localhost:8000` (adici
   - Quem mais guardou no mês e no ano: aportes − retiradas no período (rendimento não conta). No ano, desempata quem guardou em mais meses.
   - Maior patrimônio: saldo total aprovado.
   - Constância: meses seguidos guardando.
-  - % da meta: patrimônio ÷ soma das metas.
+  - Meta no prazo (ritmo): quanto já juntou do que faltava para a meta (meta − saldo inicial), comparado com o tempo que já passou até o prazo. 100% = no ritmo. Só caixinhas com prazo e meta maior que o saldo inicial (meta fácil não conta).
 - Você vê os valores de todos. Os usuários veem as posições e os nomes, e só o próprio valor. O ranking publicado para eles é atualizado sempre que você abre o app.
 
 ## Modelo de dados (Firestore)

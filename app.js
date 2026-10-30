@@ -111,7 +111,7 @@ function agendarRanking() {
   clearTimeout(timerRank);
   timerRank = setTimeout(async () => {
     if (ehMembro() || !uid) return;
-    const pub = rankingPublico(rankings(state.pessoas, state.caixinhas, state.lancamentos, hoje().slice(0, 7)));
+    const pub = rankingPublico(rankings(state.pessoas, state.caixinhas, state.lancamentos, hoje().slice(0, 7), hoje()));
     const json = JSON.stringify(pub);
     if (json === ultimoRank) return;
     try {
@@ -263,16 +263,17 @@ const RANKS = [
   { id: "ano", titulo: "Quem mais guardou no ano", fmt: brl },
   { id: "patrimonio", titulo: "Maior patrimônio", fmt: brl },
   { id: "constancia", titulo: "Constância (meses seguidos guardando)", fmt: (v) => `${v} ${v === 1 ? "mês" : "meses"}` },
-  { id: "meta", titulo: "% da meta atingida", fmt: pct },
+  { id: "meta", titulo: "Meta no prazo (ritmo)", fmt: (v) => `${pct(v)} do ritmo` },
 ];
+const INFO_META = "Meta no prazo: quanto já juntou do que faltava para a meta, comparado com o tempo que já passou até o prazo (100% = no ritmo; acima = adiantado). Só entram caixinhas com meta maior que o saldo inicial e com prazo.";
 function renderRanking() {
   const mesAtual = hoje().slice(0, 7);
   const selMes = $("#rk-mes"), selAno = $("#rk-ano");
   if (!selMes.value) selMes.value = mesAtual;
   const mes = selMes.value, anoCur = selAno.value || mesAtual.slice(0, 4);
   // Dono: calcula com valores. Usuário: posições do ranking publicado + o próprio valor.
-  const completo = ehMembro() ? null : rankings(state.pessoas, state.caixinhas, state.lancamentos, mesAtual);
-  const meu = ehMembro() ? rankings(state.pessoas, state.caixinhas, state.lancamentos, mesAtual) : null;
+  const completo = ehMembro() ? null : rankings(state.pessoas, state.caixinhas, state.lancamentos, mesAtual, hoje());
+  const meu = ehMembro() ? rankings(state.pessoas, state.caixinhas, state.lancamentos, mesAtual, hoje()) : null;
   const fonte = completo || state.rankPub || { guardouMes: {}, guardouAno: {}, patrimonio: [], constancia: [], meta: [] };
   const anos = [...new Set([mesAtual.slice(0, 4), ...Object.keys(fonte.guardouAno || {})])].sort().reverse();
   selAno.innerHTML = anos.map(a => `<option ${a === anoCur ? "selected" : ""}>${a}</option>`).join("");
@@ -280,8 +281,8 @@ function renderRanking() {
   const pega = (r, id) => id === "mes" ? (r.guardouMes?.[mes] || []) : id === "ano" ? (r.guardouAno?.[ano] || []) : (r[id] || []);
 
   $("#rk-info").textContent = ehMembro()
-    ? (state.rankPub?.atualizadoEm ? `Atualizado em ${new Date(state.rankPub.atualizadoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}. ` : "Ainda não publicado. ") + "Só contam lançamentos aprovados."
-    : "Só contam lançamentos e caixinhas aprovados. Os usuários veem as posições e os nomes, sem os valores dos outros.";
+    ? (state.rankPub?.atualizadoEm ? `Atualizado em ${new Date(state.rankPub.atualizadoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}. ` : "Ainda não publicado. ") + "Só contam lançamentos aprovados. " + INFO_META
+    : "Só contam lançamentos e caixinhas aprovados. Os usuários veem as posições e os nomes, sem os valores dos outros. " + INFO_META;
 
   $("#rk-listas").innerHTML = RANKS.map(rk => {
     const lista = pega(fonte, rk.id);
