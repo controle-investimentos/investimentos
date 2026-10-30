@@ -4,31 +4,50 @@ service cloud.firestore {
     function logado() { return request.auth != null; }
     function meuEmail() { return request.auth.token.email.lower(); }
     function acessoPath() { return /databases/$(database)/documents/acessos/$(meuEmail()); }
-    // Amigo com acesso de leitura aos dados do dono {uid}.
-    function leitorDe(uid) {
+    // Usuário (amigo) cadastrado pelo dono {uid}.
+    function membroDe(uid) {
       return logado() && request.auth.token.email != null
         && request.auth.token.email_verified == true
         && exists(acessoPath()) && get(acessoPath()).data.ownerUid == uid;
     }
     function minhaPessoa() { return get(acessoPath()).data.pessoaId; }
+    function meu(d) { return d.pessoaId == minhaPessoa(); }
+    function pendente(d) { return d.get('aprovado', true) == false; }
+    function caixinhaMinha(uid, cxId) {
+      return get(/databases/$(database)/documents/users/$(uid)/caixinhas/$(cxId)).data.pessoaId == minhaPessoa();
+    }
 
-    // Dono: lê e escreve tudo o que é dele.
+    // Dono: lê e escreve tudo o que é dele (e aprova).
     match /users/{uid}/{document=**} {
       allow read, write: if logado() && request.auth.uid == uid;
     }
 
-    // Amigo: só lê a própria pessoa, as próprias caixinhas e os próprios lançamentos.
+    // Usuário: vê só a própria pessoa.
     match /users/{uid}/pessoas/{pid} {
-      allow get: if leitorDe(uid) && pid == minhaPessoa();
+      allow get: if membroDe(uid) && pid == minhaPessoa();
     }
+    // Usuário: lê e lança só o que é dele; tudo que grava fica pendente de aprovação;
+    // só pode excluir o que ainda está pendente.
     match /users/{uid}/caixinhas/{id} {
-      allow read: if leitorDe(uid) && resource.data.pessoaId == minhaPessoa();
+      allow read: if membroDe(uid) && meu(resource.data);
+      allow create: if membroDe(uid) && meu(request.resource.data) && pendente(request.resource.data);
+      allow update: if membroDe(uid) && meu(resource.data) && meu(request.resource.data) && pendente(request.resource.data);
+      allow delete: if membroDe(uid) && meu(resource.data) && pendente(resource.data);
     }
     match /users/{uid}/lancamentos/{id} {
-      allow read: if leitorDe(uid) && resource.data.pessoaId == minhaPessoa();
+      allow read: if membroDe(uid) && meu(resource.data);
+      allow create: if membroDe(uid) && meu(request.resource.data) && pendente(request.resource.data)
+                    && caixinhaMinha(uid, request.resource.data.caixinhaId);
+      allow update: if membroDe(uid) && meu(resource.data) && meu(request.resource.data) && pendente(request.resource.data)
+                    && caixinhaMinha(uid, request.resource.data.caixinhaId);
+      allow delete: if membroDe(uid) && meu(resource.data) && pendente(resource.data);
+    }
+    // Ranking público (só posições e nomes, sem valores), gerado pelo app do dono.
+    match /users/{uid}/ranking/{doc} {
+      allow read: if membroDe(uid);
     }
 
-    // Acessos: id do documento = e-mail Google do amigo, em minúsculas.
+    // Acessos: id do documento = e-mail Google do usuário, em minúsculas.
     match /acessos/{email} {
       allow get: if logado() && (email == meuEmail() || resource.data.ownerUid == request.auth.uid);
       allow list: if logado() && resource.data.ownerUid == request.auth.uid;

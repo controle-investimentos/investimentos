@@ -60,3 +60,17 @@ main{padding:14px 12px 40px}
 .meta .top{flex-direction:column;gap:2px}
 input,select{font-size:16px}
 }
+.badge.warn{background:color-mix(in srgb,#f5a524 20%,transparent);color:#b7791f}
+td.acoes{white-space:nowrap}
+.rk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.rk{border:1px solid var(--line);border-radius:10px;padding:12px}
+.rk h3{font-size:13.5px;margin:0 0 8px}
+.rk ol{list-style:none;margin:0;padding:0}
+.rk li{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+.rk li:last-child{border-bottom:0}
+.rk li .pos{width:28px;text-align:center;flex:none}
+.rk li .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk li .v{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+.rk li.eu{font-weight:700;color:var(--brand)}
+.rk-eu{margin-top:8px;font-size:13px;color:var(--muted)}
+.empty.small{padding:6px;font-size:13px}

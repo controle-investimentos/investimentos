@@ -7,7 +7,7 @@ Controle de saldo inicial, caixinhas/metas (Ações, Fundos, Renda Fixa, Reserva
 - `index.html`, `style.css`, `app.js` — interface e lógica
 - `calc.js` — cálculos (saldo, metas, evolução); testado com `node test-calc.mjs`
 - `firebase-config.js` — configuração do seu projeto Firebase
-- `firestore.rules` — regras: o dono acessa `users/{uid}/...`; o amigo só lê os próprios dados
+- `firestore.rules` — regras: o dono acessa tudo; o usuário lê e lança só os próprios dados, sempre como pendente
 - `.github/workflows/pages.yml` — publica no GitHub Pages a cada push na `main`
 
 ## Publicado
@@ -27,14 +27,23 @@ Controle de saldo inicial, caixinhas/metas (Ações, Fundos, Renda Fixa, Reserva
 
 Teste local: `python3 -m http.server 8000` e abra `http://localhost:8000` (adicione `localhost` aos domínios autorizados).
 
-## Acesso dos amigos (somente leitura)
-Na aba **Pessoas**, edite a pessoa e preencha o **e-mail Google** dela. Ela entra no mesmo link com essa conta e vê só as próprias caixinhas, lançamentos e painel, sem poder alterar nada. Para tirar o acesso, apague o e-mail (ou exclua a pessoa).
+## Usuários, aprovação e ranking
+- Na aba **Pessoas**, preencha o **e-mail Google** da pessoa. Ela entra no mesmo link com essa conta, vê só os próprios dados e pode criar caixinhas e lançamentos.
+- Tudo que o usuário grava fica **pendente**: aparece no saldo dele na hora, mas só conta no ranking depois que você aprovar (card "Aguardando sua aprovação" no Painel, ou o botão Aprovar nas tabelas). O usuário só pode excluir o que ainda está pendente; se editar algo aprovado, volta para aprovação.
+- **Ranking** (Painel), só com itens aprovados:
+  - Quem mais guardou no mês e no ano: aportes − retiradas no período (rendimento não conta). No ano, desempata quem guardou em mais meses.
+  - Maior patrimônio: saldo total aprovado.
+  - Constância: meses seguidos guardando.
+  - % da meta: patrimônio ÷ soma das metas.
+- Você vê os valores de todos. Os usuários veem as posições e os nomes, e só o próprio valor. O ranking publicado para eles é atualizado sempre que você abre o app.
 
 ## Modelo de dados (Firestore)
 `users/{uid}/pessoas/{id}`: `nome, email`
 `users/{uid}/caixinhas/{id}`: `pessoaId, nome, tipo, saldoInicial, dataInicial, meta, prazo`
 `users/{uid}/lancamentos/{id}`: `data, caixinhaId, pessoaId, tipo (Aporte|Retirada|Rendimento), valor, obs`
-`acessos/{email}`: `ownerUid, pessoaId, nome` (libera a leitura dos dados daquela pessoa)
+`acessos/{email}`: `ownerUid, pessoaId, nome` (liga o e-mail Google à pessoa)
+`users/{uid}/ranking/geral`: posições e nomes de cada ranking (sem valores)
+Caixinhas e lançamentos têm `aprovado` (true/false).
 
 Saldo da caixinha = saldo inicial + aportes − retiradas + rendimentos.
 
