@@ -47,3 +47,16 @@ tr.tot td{font-weight:700;border-bottom:0}
 .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,var(--brand) 14%,transparent);color:var(--brand);font-weight:600}
 body.leitor .so-dono{display:none!important}
 body:not(.leitor) .so-leitor{display:none!important}
+@media(max-width:600px){
+header{padding:10px 12px;gap:8px 12px}
+header h1{flex:1 1 auto}
+.user{display:flex;align-items:center;gap:6px}
+nav{order:3;flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav button{white-space:nowrap;padding:8px 10px}
+main{padding:14px 12px 40px}
+.kpis{grid-template-columns:1fr 1fr;gap:10px}
+.kpi{padding:12px}.kpi .v{font-size:18px}
+.chart{height:220px}
+.meta .top{flex-direction:column;gap:2px}
+input,select{font-size:16px}
+}
