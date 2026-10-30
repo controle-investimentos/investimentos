@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meus Investimentos</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<section id="login" class="center hidden">
+  <div class="card login-card">
+    <h1>Meus Investimentos</h1>
+    <p class="muted">Controle de saldo, caixinhas e metas.</p>
+    <button id="btn-login" class="primary">Entrar com Google</button>
+    <p id="login-msg" class="muted small"></p>
+  </div>
+</section>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>Meus Investimentos</h1>
+    <nav id="tabs">
+      <button data-view="dash" class="active">Painel</button>
+      <button data-view="caixinhas">Caixinhas</button>
+      <button data-view="lanc">Lançamentos</button>
+      <button data-view="pessoas">Pessoas</button>
+    </nav>
+    <div class="user"><span id="user-name" class="muted small"></span> <button id="btn-logout">Sair</button></div>
+  </header>
+
+  <main>
+    <!-- PAINEL -->
+    <section id="view-dash">
+      <div class="toolbar">
+        <label>Pessoa <select id="f-pessoa"></select></label>
+        <button id="btn-export">Exportar CSV</button>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="grid2">
+        <div class="card"><h2>Evolução do saldo (12 meses)</h2><div class="chart"><canvas id="ch-evo"></canvas></div></div>
+        <div class="card"><h2>Por tipo de investimento</h2><div class="chart"><canvas id="ch-tipo"></canvas></div></div>
+      </div>
+      <div class="card"><h2>Metas</h2><div id="metas"></div></div>
+      <div class="card"><h2>Por pessoa</h2><div id="por-pessoa" class="table-wrap"></div></div>
+    </section>
+
+    <!-- CAIXINHAS -->
+    <section id="view-caixinhas" class="hidden">
+      <div class="toolbar"><h2>Caixinhas / Metas</h2><button class="primary" id="btn-new-cx">+ Nova caixinha</button></div>
+      <div class="card table-wrap" id="tb-cx"></div>
+    </section>
+
+    <!-- LANÇAMENTOS -->
+    <section id="view-lanc" class="hidden">
+      <div class="toolbar"><h2>Lançamentos</h2>
+        <label>Mês <input type="month" id="f-mes"></label>
+        <button class="primary" id="btn-new-l">+ Novo lançamento</button></div>
+      <div class="card table-wrap" id="tb-l"></div>
+    </section>
+
+    <!-- PESSOAS -->
+    <section id="view-pessoas" class="hidden">
+      <div class="toolbar"><h2>Pessoas</h2><button class="primary" id="btn-new-p">+ Nova pessoa</button></div>
+      <div class="card table-wrap" id="tb-p"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Diálogos -->
+<dialog id="dlg-p"><form method="dialog" id="form-p">
+  <h3>Pessoa</h3>
+  <label>Nome <input name="nome" required maxlength="60"></label>
+  <div class="actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="ok">Salvar</button></div>
+</form></dialog>
+
+<dialog id="dlg-cx"><form method="dialog" id="form-cx">
+  <h3>Caixinha / Meta</h3>
+  <label>Pessoa <select name="pessoaId" required></select></label>
+  <label>Nome <input name="nome" required maxlength="60" placeholder="Reserva de emergência"></label>
+  <label>Tipo <select name="tipo" required></select></label>
+  <label>Saldo inicial (já investido) <input name="saldoInicial" type="number" step="0.01" min="0" value="0" required></label>
+  <label>Data do saldo inicial <input name="dataInicial" type="date"></label>
+  <label>Meta (R$) <input name="meta" type="number" step="0.01" min="0" value="0"></label>
+  <label>Prazo da meta <input name="prazo" type="date"></label>
+  <div class="actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="ok">Salvar</button></div>
+</form></dialog>
+
+<dialog id="dlg-l"><form method="dialog" id="form-l">
+  <h3>Lançamento</h3>
+  <label>Data <input name="data" type="date" required></label>
+  <label>Pessoa <select name="pessoaId" required></select></label>
+  <label>Caixinha <select name="caixinhaId" required></select></label>
+  <label>Tipo <select name="tipo" required><option>Aporte</option><option>Retirada</option><option>Rendimento</option></select></label>
+  <label>Valor (R$) <input name="valor" type="number" step="0.01" required></label>
+  <label>Observação <input name="obs" maxlength="120"></label>
+  <p class="muted small">Rendimento pode ser negativo (perda). Aporte e retirada: valor positivo.</p>
+  <div class="actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="ok">Salvar</button></div>
+</form></dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
