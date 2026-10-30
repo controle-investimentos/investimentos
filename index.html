@@ -24,16 +24,16 @@
       <button data-view="dash" class="active">Painel</button>
       <button data-view="caixinhas">Caixinhas</button>
       <button data-view="lanc">Lançamentos</button>
-      <button data-view="pessoas">Pessoas</button>
+      <button data-view="pessoas" class="so-dono">Pessoas</button>
     </nav>
-    <div class="user"><span id="user-name" class="muted small"></span> <button id="btn-logout">Sair</button></div>
+    <div class="user"><span class="badge so-leitor">Somente leitura</span> <span id="user-name" class="muted small"></span> <button id="btn-logout">Sair</button></div>
   </header>
 
   <main>
     <!-- PAINEL -->
     <section id="view-dash">
       <div class="toolbar">
-        <label>Pessoa <select id="f-pessoa"></select></label>
+        <label class="so-dono">Pessoa <select id="f-pessoa"></select></label>
         <button id="btn-export">Exportar CSV</button>
       </div>
       <div class="kpis" id="kpis"></div>
@@ -47,7 +47,7 @@
 
     <!-- CAIXINHAS -->
     <section id="view-caixinhas" class="hidden">
-      <div class="toolbar"><h2>Caixinhas / Metas</h2><button class="primary" id="btn-new-cx">+ Nova caixinha</button></div>
+      <div class="toolbar"><h2>Caixinhas / Metas</h2><button class="primary so-dono" id="btn-new-cx">+ Nova caixinha</button></div>
       <div class="card table-wrap" id="tb-cx"></div>
     </section>
 
@@ -55,7 +55,7 @@
     <section id="view-lanc" class="hidden">
       <div class="toolbar"><h2>Lançamentos</h2>
         <label>Mês <input type="month" id="f-mes"></label>
-        <button class="primary" id="btn-new-l">+ Novo lançamento</button></div>
+        <button class="primary so-dono" id="btn-new-l">+ Novo lançamento</button></div>
       <div class="card table-wrap" id="tb-l"></div>
     </section>
 
@@ -71,6 +71,8 @@
 <dialog id="dlg-p"><form method="dialog" id="form-p">
   <h3>Pessoa</h3>
   <label>Nome <input name="nome" required maxlength="60"></label>
+  <label>E-mail Google (para ele ver o próprio saldo) <input name="email" type="email" maxlength="120" placeholder="amigo@gmail.com"></label>
+  <p class="muted small">Com o e-mail preenchido, a pessoa entra no mesmo link com essa conta Google e vê só as caixinhas e lançamentos dela, sem poder alterar nada. Deixe em branco para não dar acesso.</p>
   <div class="actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="ok">Salvar</button></div>
 </form></dialog>
 

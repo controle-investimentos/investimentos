@@ -1,9 +1,41 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cada usuário só lê/escreve os próprios dados.
+    function logado() { return request.auth != null; }
+    function meuEmail() { return request.auth.token.email.lower(); }
+    function acessoPath() { return /databases/$(database)/documents/acessos/$(meuEmail()); }
+    // Amigo com acesso de leitura aos dados do dono {uid}.
+    function leitorDe(uid) {
+      return logado() && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && exists(acessoPath()) && get(acessoPath()).data.ownerUid == uid;
+    }
+    function minhaPessoa() { return get(acessoPath()).data.pessoaId; }
+
+    // Dono: lê e escreve tudo o que é dele.
     match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if logado() && request.auth.uid == uid;
+    }
+
+    // Amigo: só lê a própria pessoa, as próprias caixinhas e os próprios lançamentos.
+    match /users/{uid}/pessoas/{pid} {
+      allow get: if leitorDe(uid) && pid == minhaPessoa();
+    }
+    match /users/{uid}/caixinhas/{id} {
+      allow read: if leitorDe(uid) && resource.data.pessoaId == minhaPessoa();
+    }
+    match /users/{uid}/lancamentos/{id} {
+      allow read: if leitorDe(uid) && resource.data.pessoaId == minhaPessoa();
+    }
+
+    // Acessos: id do documento = e-mail Google do amigo, em minúsculas.
+    match /acessos/{email} {
+      allow get: if logado() && (email == meuEmail() || resource.data.ownerUid == request.auth.uid);
+      allow list: if logado() && resource.data.ownerUid == request.auth.uid;
+      allow create: if logado() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if logado() && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if logado() && resource.data.ownerUid == request.auth.uid;
     }
   }
 }

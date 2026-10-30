@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc,
-  addDoc, setDoc, deleteDoc, onSnapshot, writeBatch }
+  getDoc, deleteDoc, onSnapshot, writeBatch, query, where }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { TIPOS_INV, saldoCaixinha, totais, porTipo, evolucao, brl, pct } from "./calc.js";
@@ -11,6 +11,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtData = (d) => d ? d.split("-").reverse().join("/") : "";
 const hoje = () => new Date().toISOString().slice(0, 10);
+const emailKey = (e) => String(e ?? "").trim().toLowerCase();
 
 // ---------- Firebase ----------
 if (firebaseConfig.apiKey === "COLE_AQUI") {
@@ -23,9 +24,11 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
 
-let uid = null, unsubs = [];
+// modo "dono": quem controla tudo. modo "leitor": amigo que só vê os próprios dados.
+let uid = null, modo = "dono", unsubs = [];
 const state = { pessoas: [], caixinhas: [], lancamentos: [] };
 const col = (name) => collection(db, "users", uid, name);
+const ehLeitor = () => modo === "leitor";
 
 $("#btn-login").onclick = async () => {
   try { await signInWithPopup(auth, new GoogleAuthProvider()); }
@@ -33,21 +36,68 @@ $("#btn-login").onclick = async () => {
 };
 $("#btn-logout").onclick = () => signOut(auth);
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   unsubs.forEach(u => u()); unsubs = [];
+  state.pessoas = []; state.caixinhas = []; state.lancamentos = [];
   if (!user) {
     uid = null; $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); return;
   }
-  uid = user.uid;
+  // Se o e-mail estiver cadastrado como acesso de leitura de alguém, entra como leitor.
+  let acesso = null;
+  try {
+    const s = await getDoc(doc(db, "acessos", emailKey(user.email)));
+    if (s.exists()) acesso = s.data();
+  } catch (e) { console.warn("acesso", e); }
+  if (acesso && acesso.ownerUid !== user.uid) { modo = "leitor"; uid = acesso.ownerUid; }
+  else { modo = "dono"; uid = user.uid; }
+  document.body.classList.toggle("leitor", ehLeitor());
+  if (ehLeitor() && view === "pessoas") $('#tabs button[data-view="dash"]').click();
+
   $("#user-name").textContent = user.displayName || user.email || "";
   $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
+  const erro = (name) => (err) => console.error(name, err);
+
+  if (ehLeitor()) {
+    const pid = acesso.pessoaId;
+    unsubs.push(onSnapshot(doc(col("pessoas"), pid), (s) => {
+      state.pessoas = s.exists() ? [{ id: s.id, ...s.data() }] : [];
+      renderAll();
+    }, erro("pessoas")));
+    for (const name of ["caixinhas", "lancamentos"]) {
+      unsubs.push(onSnapshot(query(col(name), where("pessoaId", "==", pid)), (snap) => {
+        state[name] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderAll();
+      }, erro(name)));
+    }
+    return;
+  }
   for (const name of ["pessoas", "caixinhas", "lancamentos"]) {
     unsubs.push(onSnapshot(col(name), (snap) => {
       state[name] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       renderAll();
-    }, (err) => console.error(name, err)));
+      sincronizarPessoaIds();
+    }, erro(name)));
   }
 });
+
+// Cada lançamento guarda o pessoaId da caixinha (é o que permite ao amigo ver só os dele).
+// Corrige lançamentos antigos e os de caixinhas que mudaram de pessoa.
+let sincronizando = false;
+async function sincronizarPessoaIds() {
+  if (ehLeitor() || sincronizando) return;
+  const dono = new Map(state.caixinhas.map(c => [c.id, c.pessoaId]));
+  const fix = state.lancamentos.filter(l => dono.has(l.caixinhaId) && l.pessoaId !== dono.get(l.caixinhaId));
+  if (!fix.length) return;
+  sincronizando = true;
+  try {
+    for (let i = 0; i < fix.length; i += 400) {
+      const b = writeBatch(db);
+      fix.slice(i, i + 400).forEach(l => b.update(doc(col("lancamentos"), l.id), { pessoaId: dono.get(l.caixinhaId) }));
+      await b.commit();
+    }
+  } catch (e) { console.error("sincronizar", e); }
+  finally { sincronizando = false; }
+}
 
 // ---------- Navegação ----------
 let view = "dash";
@@ -63,7 +113,6 @@ $("#f-mes").onchange = renderAll;
 
 // ---------- Helpers de dados ----------
 const nomePessoa = (id) => state.pessoas.find(p => p.id === id)?.nome ?? "—";
-const nomeCx = (id) => state.caixinhas.find(c => c.id === id)?.nome ?? "—";
 const byNome = (a, b) => (a.nome || "").localeCompare(b.nome || "", "pt-BR");
 function filtrados() {
   const pid = $("#f-pessoa").value;
@@ -139,8 +188,10 @@ function renderDash() {
   }).join("");
   $("#por-pessoa").innerHTML = linhas
     ? `<table><thead><tr><th>Pessoa</th><th class="n">Saldo inicial</th><th class="n">Aportes</th><th class="n">Retiradas</th><th class="n">Rendimentos</th><th class="n">Saldo atual</th><th class="n">% da meta</th></tr></thead><tbody>${linhas}</tbody></table>`
-    : `<div class="empty">Cadastre as pessoas na aba “Pessoas”.</div>`;
+    : `<div class="empty">${ehLeitor() ? "Nenhum dado ainda." : "Cadastre as pessoas na aba “Pessoas”."}</div>`;
 }
+
+const acoes = (id) => `<td class="so-dono"><button class="link" data-edit="${esc(id)}">Editar</button><button class="link del" data-del="${esc(id)}">Excluir</button></td>`;
 
 function renderCaixinhas() {
   const rows = [...state.caixinhas].sort((a, b) => nomePessoa(a.pessoaId).localeCompare(nomePessoa(b.pessoaId), "pt-BR") || byNome(a, b)).map(c => {
@@ -148,11 +199,11 @@ function renderCaixinhas() {
     return `<tr><td>${esc(nomePessoa(c.pessoaId))}</td><td>${esc(c.nome)}</td><td>${esc(c.tipo)}</td>
       <td class="n">${brl(s.inicial)}</td><td class="n">${brl(s.aportes)}</td><td class="n">${brl(s.retiradas)}</td><td class="n">${brl(s.rend)}</td>
       <td class="n"><b>${brl(s.saldo)}</b></td><td class="n">${brl(s.meta)}</td><td class="n">${pct(s.pct)}</td><td>${fmtData(c.prazo)}</td>
-      <td><button class="link" data-edit="${esc(c.id)}">Editar</button><button class="link del" data-del="${esc(c.id)}">Excluir</button></td></tr>`;
+      ${acoes(c.id)}</tr>`;
   }).join("");
   $("#tb-cx").innerHTML = rows
-    ? `<table><thead><tr><th>Pessoa</th><th>Caixinha</th><th>Tipo</th><th class="n">Inicial</th><th class="n">Aportes</th><th class="n">Retiradas</th><th class="n">Rendimentos</th><th class="n">Saldo atual</th><th class="n">Meta</th><th class="n">%</th><th>Prazo</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
-    : `<div class="empty">Nenhuma caixinha. Clique em “+ Nova caixinha”.</div>`;
+    ? `<table><thead><tr><th>Pessoa</th><th>Caixinha</th><th>Tipo</th><th class="n">Inicial</th><th class="n">Aportes</th><th class="n">Retiradas</th><th class="n">Rendimentos</th><th class="n">Saldo atual</th><th class="n">Meta</th><th class="n">%</th><th>Prazo</th><th class="so-dono"></th></tr></thead><tbody>${rows}</tbody></table>`
+    : `<div class="empty">${ehLeitor() ? "Nenhuma caixinha ainda." : "Nenhuma caixinha. Clique em “+ Nova caixinha”."}</div>`;
 }
 
 function renderLanc() {
@@ -163,10 +214,10 @@ function renderLanc() {
     const cls = l.tipo === "Retirada" ? "neg" : (l.tipo === "Rendimento" && l.valor < 0 ? "neg" : "pos");
     return `<tr><td>${fmtData(l.data)}</td><td>${esc(nomePessoa(cx?.pessoaId))}</td><td>${esc(cx?.nome ?? "—")}</td><td>${esc(l.tipo)}</td>
       <td class="n ${cls}">${brl(l.valor)}</td><td>${esc(l.obs)}</td>
-      <td><button class="link" data-edit="${esc(l.id)}">Editar</button><button class="link del" data-del="${esc(l.id)}">Excluir</button></td></tr>`;
+      ${acoes(l.id)}</tr>`;
   }).join("");
   $("#tb-l").innerHTML = rows
-    ? `<table><thead><tr><th>Data</th><th>Pessoa</th><th>Caixinha</th><th>Tipo</th><th class="n">Valor</th><th>Obs.</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    ? `<table><thead><tr><th>Data</th><th>Pessoa</th><th>Caixinha</th><th>Tipo</th><th class="n">Valor</th><th>Obs.</th><th class="so-dono"></th></tr></thead><tbody>${rows}</tbody></table>`
     : `<div class="empty">Nenhum lançamento${mes ? " neste mês" : ""}.</div>`;
 }
 
@@ -175,11 +226,12 @@ function renderPessoas() {
     const cp = state.caixinhas.filter(c => c.pessoaId === p.id);
     const ids = new Set(cp.map(c => c.id));
     const x = totais(cp, state.lancamentos.filter(l => ids.has(l.caixinhaId)));
-    return `<tr><td>${esc(p.nome)}</td><td class="n">${cp.length}</td><td class="n">${brl(x.saldo)}</td>
-      <td><button class="link" data-edit="${esc(p.id)}">Editar</button><button class="link del" data-del="${esc(p.id)}">Excluir</button></td></tr>`;
+    const acesso = p.email ? `<span class="badge">${esc(p.email)}</span>` : `<span class="muted small">sem acesso</span>`;
+    return `<tr><td>${esc(p.nome)}</td><td>${acesso}</td><td class="n">${cp.length}</td><td class="n">${brl(x.saldo)}</td>
+      ${acoes(p.id)}</tr>`;
   }).join("");
   $("#tb-p").innerHTML = rows
-    ? `<table><thead><tr><th>Nome</th><th class="n">Caixinhas</th><th class="n">Saldo atual</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    ? `<table><thead><tr><th>Nome</th><th>Acesso (e-mail Google)</th><th class="n">Caixinhas</th><th class="n">Saldo atual</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
     : `<div class="empty">Comece cadastrando as pessoas (os dois amigos).</div>`;
 }
 
@@ -198,20 +250,34 @@ function onSubmit(dlg, form, handler) {
 }
 const num = (v) => Number(String(v).replace(",", ".")) || 0;
 const optsPessoas = () => [...state.pessoas].sort(byNome).map(p => `<option value="${esc(p.id)}">${esc(p.nome)}</option>`).join("");
+const salvar = async (ref, data) => { const b = writeBatch(db); b.set(ref, data, { merge: true }); await b.commit(); };
 
-// Pessoas
+// Pessoas (o e-mail Google libera o acesso de leitura da pessoa)
 let editP = null;
 $("#btn-new-p").onclick = () => { editP = null; openDialog($("#dlg-p"), $("#form-p")); };
 onSubmit($("#dlg-p"), $("#form-p"), async (d) => {
-  const data = { nome: d.nome.trim() };
-  if (editP) await setDoc(doc(col("pessoas"), editP), data, { merge: true }); else await addDoc(col("pessoas"), data);
+  const nome = d.nome.trim(), email = emailKey(d.email);
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert("E-mail inválido.");
+  if (email && state.pessoas.some(p => p.id !== editP && emailKey(p.email) === email)) return alert("Esse e-mail já está em outra pessoa.");
+  const antigo = editP ? emailKey(state.pessoas.find(p => p.id === editP)?.email) : "";
+  const ref = editP ? doc(col("pessoas"), editP) : doc(col("pessoas"));
+  const b = writeBatch(db);
+  b.set(ref, { nome, email }, { merge: true });
+  if (antigo && antigo !== email) b.delete(doc(db, "acessos", antigo));
+  if (email) b.set(doc(db, "acessos", email), { ownerUid: uid, pessoaId: ref.id, nome });
+  await b.commit();
 });
 $("#tb-p").onclick = async (e) => {
   const id = e.target.dataset.edit, del = e.target.dataset.del;
-  if (id) { editP = id; openDialog($("#dlg-p"), $("#form-p"), { nome: nomePessoa(id) }); }
+  if (id) { editP = id; const p = state.pessoas.find(x => x.id === id); openDialog($("#dlg-p"), $("#form-p"), { nome: p?.nome, email: p?.email }); }
   if (del) {
     if (state.caixinhas.some(c => c.pessoaId === del)) return alert("Exclua ou mude as caixinhas dessa pessoa antes.");
-    if (confirm("Excluir esta pessoa?")) await deleteDoc(doc(col("pessoas"), del));
+    if (!confirm("Excluir esta pessoa? O acesso dela também é removido.")) return;
+    const email = emailKey(state.pessoas.find(p => p.id === del)?.email);
+    const b = writeBatch(db);
+    b.delete(doc(col("pessoas"), del));
+    if (email) b.delete(doc(db, "acessos", email));
+    await b.commit();
   }
 };
 
@@ -228,7 +294,7 @@ function fillCxSelects() {
 onSubmit($("#dlg-cx"), $("#form-cx"), async (d) => {
   const data = { pessoaId: d.pessoaId, nome: d.nome.trim(), tipo: d.tipo, saldoInicial: num(d.saldoInicial),
                  dataInicial: d.dataInicial || "", meta: num(d.meta), prazo: d.prazo || "" };
-  if (editCx) await setDoc(doc(col("caixinhas"), editCx), data, { merge: true }); else await addDoc(col("caixinhas"), data);
+  await salvar(editCx ? doc(col("caixinhas"), editCx) : doc(col("caixinhas")), data);
 });
 $("#tb-cx").onclick = async (e) => {
   const id = e.target.dataset.edit, del = e.target.dataset.del;
@@ -260,10 +326,11 @@ $("#btn-new-l").onclick = () => {
   fillCxDoLanc(formL.elements.pessoaId.value);
 };
 onSubmit($("#dlg-l"), formL, async (d) => {
-  const data = { data: d.data, caixinhaId: d.caixinhaId, tipo: d.tipo, valor: num(d.valor), obs: (d.obs || "").trim() };
+  const cx = state.caixinhas.find(c => c.id === d.caixinhaId);
+  const data = { data: d.data, caixinhaId: d.caixinhaId, pessoaId: cx?.pessoaId || "", tipo: d.tipo, valor: num(d.valor), obs: (d.obs || "").trim() };
   if (!data.caixinhaId) return alert("Escolha uma caixinha.");
   if (data.tipo !== "Rendimento" && data.valor < 0) return alert("Aporte e retirada devem ter valor positivo.");
-  if (editL) await setDoc(doc(col("lancamentos"), editL), data, { merge: true }); else await addDoc(col("lancamentos"), data);
+  await salvar(editL ? doc(col("lancamentos"), editL) : doc(col("lancamentos")), data);
 });
 $("#tb-l").onclick = async (e) => {
   const id = e.target.dataset.edit, del = e.target.dataset.del;

@@ -44,3 +44,6 @@ tr.tot td{font-weight:700;border-bottom:0}
 .bar>i{display:block;height:100%;background:var(--brand);border-radius:99px}
 .bar>i.done{background:var(--ok)}
 .empty{color:var(--muted);padding:14px;text-align:center}
+.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,var(--brand) 14%,transparent);color:var(--brand);font-weight:600}
+body.leitor .so-dono{display:none!important}
+body:not(.leitor) .so-leitor{display:none!important}

@@ -7,7 +7,7 @@ Controle de saldo inicial, caixinhas/metas (Ações, Fundos, Renda Fixa, Reserva
 - `index.html`, `style.css`, `app.js` — interface e lógica
 - `calc.js` — cálculos (saldo, metas, evolução); testado com `node test-calc.mjs`
 - `firebase-config.js` — configuração do seu projeto Firebase
-- `firestore.rules` — regras: cada usuário só acessa `users/{uid}/...`
+- `firestore.rules` — regras: o dono acessa `users/{uid}/...`; o amigo só lê os próprios dados
 - `.github/workflows/pages.yml` — publica no GitHub Pages a cada push na `main`
 
 ## Publicado
@@ -27,13 +27,17 @@ Controle de saldo inicial, caixinhas/metas (Ações, Fundos, Renda Fixa, Reserva
 
 Teste local: `python3 -m http.server 8000` e abra `http://localhost:8000` (adicione `localhost` aos domínios autorizados).
 
+## Acesso dos amigos (somente leitura)
+Na aba **Pessoas**, edite a pessoa e preencha o **e-mail Google** dela. Ela entra no mesmo link com essa conta e vê só as próprias caixinhas, lançamentos e painel, sem poder alterar nada. Para tirar o acesso, apague o e-mail (ou exclua a pessoa).
+
 ## Modelo de dados (Firestore)
-`users/{uid}/pessoas/{id}`: `nome`
+`users/{uid}/pessoas/{id}`: `nome, email`
 `users/{uid}/caixinhas/{id}`: `pessoaId, nome, tipo, saldoInicial, dataInicial, meta, prazo`
-`users/{uid}/lancamentos/{id}`: `data, caixinhaId, tipo (Aporte|Retirada|Rendimento), valor, obs`
+`users/{uid}/lancamentos/{id}`: `data, caixinhaId, pessoaId, tipo (Aporte|Retirada|Rendimento), valor, obs`
+`acessos/{email}`: `ownerUid, pessoaId, nome` (libera a leitura dos dados daquela pessoa)
 
 Saldo da caixinha = saldo inicial + aportes − retiradas + rendimentos.
 
 ## Observações
 - O `apiKey` do Firebase não é segredo; quem protege os dados são o login e as regras.
-- Os dados são do usuário logado. Para os amigos verem o próprio saldo, o próximo passo é criar um papel "leitor" por pessoa (posso adicionar).
+- Quem entra sem e-mail cadastrado como amigo ganha um espaço próprio e vazio; não vê os seus dados.
